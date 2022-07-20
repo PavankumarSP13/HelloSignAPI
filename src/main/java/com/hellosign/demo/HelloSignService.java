@@ -1,118 +1,270 @@
 package com.hellosign.demo;
 
-import com.hellosign.sdk.HelloSignClient;
-import com.hellosign.sdk.HelloSignException;
-import com.hellosign.sdk.resource.SignatureRequest;
-import com.hellosign.sdk.resource.TemplateSignatureRequest;
-import com.itextpdf.text.DocumentException;
-import com.itextpdf.text.Image;
-import com.itextpdf.text.pdf.PdfContentByte;
-import com.itextpdf.text.pdf.PdfReader;
-import com.itextpdf.text.pdf.PdfStamper;
-import org.apache.commons.io.FileUtils;
-import org.apache.commons.io.IOUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.env.Environment;
-import org.springframework.core.io.ClassPathResource;
-import org.springframework.stereotype.Service;
-
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.IOUtils;
+import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.stereotype.Service;
+
+import com.hellosign.sdk.HelloSignClient;
+import com.hellosign.sdk.HelloSignException;
+import com.hellosign.sdk.resource.Event;
+import com.hellosign.sdk.resource.TemplateSignatureRequest;
+import com.hellosign.sdk.resource.support.Document;
+import com.itextpdf.text.DocumentException;
+import com.itextpdf.text.Element;
+import com.itextpdf.text.Image;
+import com.itextpdf.text.Phrase;
+import com.itextpdf.text.pdf.ColumnText;
+import com.itextpdf.text.pdf.PdfContentByte;
+import com.itextpdf.text.pdf.PdfReader;
+import com.itextpdf.text.pdf.PdfStamper;
 
 @Service
 public class HelloSignService {
 
-    private String imagePath = "C://Users/pavankumar.sp/Desktop/HOME/StudentPhotos";
+	private static final Logger LOGGER = LoggerFactory.getLogger(HelloSignService.class);
+	private static final String API_KEY = "ac2685093dd7cc99066561d0446e49ffd7c9d5179cec3797b3a65ba86a53e934";
+	private static final String CLIENT_ID = "f8ff965827dfae4528fc388077a8bd93";
 
-    private static final Logger LOGGER = (Logger) LoggerFactory.getLogger(HelloSignService.class);
+	/**
+	 * This method sends the details using the TemplateID to HS
+	 * 
+	 * @param templateId
+	 * @param fname
+	 * @param lname
+	 * @param clinicalRotation
+	 * @param clinicalSite
+	 * @param email
+	 * @return
+	 * @throws HelloSignException
+	 */
+	public String sendFormUsingTemplateId(SendFormRequest req) throws HelloSignException {
+		try {
+			String fname = req.getFirstName();
+			String lname = req.getLastName();
+			String clinicalSite = req.getClinicalSite();
+			String clinicalRotation = req.getClinicalRotation();
+			String subjectLine = lname + ", " + fname;
+			String formName = "STUDENT_CLERKSHIP_EVALUATION_FORM";
+			String emailBlurb = "Please complete this Student Portfolio for: " + subjectLine + "; " + clinicalSite
+					+ " at the end of this rotation";
+			String emailSubject = subjectLine + "; " + clinicalRotation + "; " + formName + "; " + clinicalSite;
 
-    @Autowired
-    private Environment env;
+			// Custom Fields
+			Map<String, String> customFields = getCustomFields(fname, lname, clinicalRotation, clinicalSite);
 
-    public String sendForm(String templateId) throws HelloSignException {
-    try {
+			TemplateSignatureRequest request = new TemplateSignatureRequest();
+			request.setTitle(formName);
+			request.setSubject(emailSubject);
+			request.setMessage(emailBlurb);
+			request.setSigner("DME", req.getStudentEmail(), fname);
+//			if (req.getCcEmail() != null)
+//				request.setCC("DME", req.getCcEmail());
+			request.setClientId(CLIENT_ID);
+			request.setTemplateId(req.getTemplateId());
+			request.setTestMode(true);
+			request.setCustomFields(customFields);
 
-        SignatureRequest request = new SignatureRequest();
-        request.setTitle("Demo Title");
-        request.setSubject("Demo Subject");
-        request.setMessage("Please sign this form");
-        request.addSigner("pavankumar.sp@Triconinfotech.com", "Pavan");
-        request.setClientId("f8ff965827dfae4528fc388077a8bd93");
-//           request.setTemplateId("2ee2c69f376952a1f18c3909dbc8875f523d4b2d");
-//            request.setCustomFieldValue("StudentName","Pavan");
-//            request.setCustomFieldValue("txtStudentID","13");
-//            request.setCustomFieldValue("ClinicalRotation","Core");
-//            request.setCustomFieldValue("StartDate","07/07/2022");
-//            request.setCustomFieldValue("EndDate","07/28/2022");
-//            request.setCustomFieldValue("ClinicalRotationSite","Apollo");
+			HelloSignClient client = new HelloSignClient(API_KEY);
+			client.sendTemplateSignatureRequest(request);
+			return "Sent";
+		} catch (Exception e) {
+			e.printStackTrace();
+			return "Exception";
+		}
+	}
 
-//            StudentName,txtStudentID,ClinicalRotation,StartDate,EndDate,ClinicalRotationSite
-        request.setTestMode(true);
+	/**
+	 * This method sends the details with image to HS
+	 * 
+	 * @param fname
+	 * @param lname
+	 * @param clinicalRotation
+	 * @param clinicalSite
+	 * @param email
+	 * @return
+	 * @throws Exception
+	 */
+	public String sendFormWithImage(SendFormRequest req) throws Exception {
+		try {
+			String fname = req.getFirstName();
+			String lname = req.getLastName();
+			String clinicalSite = req.getClinicalSite();
+			String clinicalRotation = req.getClinicalRotation();
+			String subjectLine = lname + ", " + fname;
+			String formName = "STUDENT_CLERKSHIP_EVALUATION_FORM";
+			String emailBlurb = "Please complete this Student Portfolio for: " + subjectLine + "; " + clinicalSite
+					+ " at the end of this rotation";
+			String emailSubject = subjectLine + "; " + clinicalRotation + "; " + formName + "; " + clinicalSite;
 
-        HelloSignClient client = new HelloSignClient(
-                "ac2685093dd7cc99066561d0446e49ffd7c9d5179cec3797b3a65ba86a53e934");
-        SignatureRequest newRequest = client.sendSignatureRequest(request);
+			// Custom Fields
+			Map<String, String> customFields = getCustomFields(fname, lname, clinicalRotation, clinicalSite);
 
-        return "Sent";
-    } catch (Exception e) {
-        e.printStackTrace();
-        return "Exception";
-    }
-    }
+			// Using signature Request
+//			SignatureRequest request = new SignatureRequest();
+//			List<Signer> signers = new ArrayList<>();
+//			Signer signer = new Signer(req.getStudentEmail(), "DME");
+//			signers.add(signer);
+//			request.setTitle(formName);
+//			request.setSubject(emailSubject);
+//			request.setMessage(emailBlurb);
+//			request.setSigners(signers);
+//			request.setClientId(CLIENT_ID);
+//			request.setTestMode(true);
+//			request.setCustomFields(customFields);
+//			request.setTestMode(true);
 
-    private byte[] prepareDocument(int formId) throws IOException, DocumentException {
-        String inputForm = "";
-        switch (formId) {
-            case 1:
-                inputForm = HelloSignConstants.STUDENT_CLERKSHIP_EVALUATION_TEMPLATE_PATH;
-                break;
-        }
+			// Using Template Signature Request
+			TemplateSignatureRequest request = new TemplateSignatureRequest();
+			request.setTitle(formName);
+			request.setSubject(emailSubject);
+			request.setMessage(emailBlurb);
+			request.setSigner("DME", req.getStudentEmail(), fname);
+//			if (req.getCcEmail() != null)
+//				request.setCC("DME", req.getCcEmail());
+			request.setClientId(CLIENT_ID);
+			request.setTemplateId(req.getTemplateId());
+			request.setTestMode(true);
+			request.setCustomFields(customFields);
 
-        byte[] templateBytes = IOUtils.toByteArray(new ClassPathResource(inputForm).getInputStream());
+			// Image
+			byte[] arr = prepareDocument(1);
+			List<Document> docs = new ArrayList<>();
+			Document d = new Document();
 
-        PdfReader pdfReader = new PdfReader(templateBytes);
-        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-        PdfStamper pdfStamper = null;
-        try {
-            pdfStamper = new PdfStamper(pdfReader, byteArrayOutputStream);
-        } catch (DocumentException e) {
-            e.printStackTrace();
-            throw e;
-        }
-        PdfContentByte contentByte = pdfStamper.getOverContent(1);
-        byte[] imageFile = null;
-        File file;
-        LOGGER.info("fetching the image and file");
-        long startTime = System.currentTimeMillis();
-        try {
-            file = new File(imagePath + ".jpg");
-            imageFile = FileUtils.readFileToByteArray(file);
-        } catch (IOException e) {
-            e.printStackTrace();
-            throw e;
-        }
-        if (imageFile != null) {
-            Image image = Image.getInstance(imageFile);
-            image.scaleAbsoluteHeight(150);
-            image.scaleAbsoluteWidth(150);
+			FileUtils.writeByteArrayToFile(new File("C://Users/faizanahmed.khan/Desktop/StudentPhotos/s.pdf"), arr);
+			d.setFile(new File("C://Users/faizanahmed.khan/Desktop/StudentPhotos/s.pdf"));
+			docs.add(d);
+			request.setDocuments(docs);
 
-            image.setBorder(1);
-            image.setBorderWidth(3);
-            image.setBorderWidthLeft(3);
-            image.setBorderWidthRight(3);
-            image.setBorderWidthBottom(3);
-            image.setAbsolutePosition(29, 470);
-            contentByte.addImage(image);
-        }
-        pdfStamper.close();
-        return byteArrayOutputStream.toByteArray();
-    }
+			HelloSignClient client = new HelloSignClient(API_KEY);
+//			client.sendSignatureRequest(request);
+			client.sendTemplateSignatureRequest(request);
 
+			return "Sent";
+		} catch (Exception e) {
+			e.printStackTrace();
+			throw e;
+		}
+	}
+
+	/**
+	 * This method is used to generate the custom fields to be sent to HS
+	 * 
+	 * @param fname
+	 * @param lname
+	 * @param clinicalRotation
+	 * @param clinicalSite
+	 * @return
+	 */
+	private Map<String, String> getCustomFields(String fname, String lname, String clinicalRotation,
+			String clinicalSite) {
+		Map<String, String> customFields = new HashMap<>();
+		customFields.put("StudentName", fname + " " + lname);
+		customFields.put("txtStudentID", "13");
+		customFields.put("ClinicalRotation", clinicalRotation);
+		customFields.put("StartDate", "07/01/2022");
+		customFields.put("EndDate", "07/28/2022");
+		customFields.put("ClinicalRotationSite", clinicalSite);
+		if (clinicalRotation.equalsIgnoreCase("Elective"))
+			customFields.put("chkElective", "true");
+		else
+			customFields.put("chkCore", "true");
+		return customFields;
+	}
+
+	private byte[] prepareDocument(int formId) throws IOException, DocumentException {
+		String inputForm = "";
+		switch (formId) {
+		case 1:
+			inputForm = HelloSignConstants.STUDENT_CLERKSHIP_EVALUATION_TEMPLATE_PATH;
+			break;
+		case 2:
+			break;
+		default:
+			break;
+		}
+
+		byte[] templateBytes = IOUtils.toByteArray(new ClassPathResource(inputForm).getInputStream());
+
+		PdfReader pdfReader = new PdfReader(templateBytes);
+		ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+		PdfStamper pdfStamper = null;
+		try {
+			pdfStamper = new PdfStamper(pdfReader, byteArrayOutputStream);
+		} catch (DocumentException e) {
+			e.printStackTrace();
+			throw e;
+		}
+		PdfContentByte contentByte = pdfStamper.getOverContent(1);
+		ColumnText.showTextAligned(contentByte, Element.ALIGN_LEFT, new Phrase("Hello people!"), 250, 750, 0);
+
+		byte[] imageFile = null;
+		File file;
+		LOGGER.info("fetching the image and file");
+		try {
+			String imagePath = "C://Users/faizanahmed.khan/Desktop/StudentPhotos/faiz";
+			file = new File(imagePath + ".jpg");
+			imageFile = FileUtils.readFileToByteArray(file);
+		} catch (IOException e) {
+			e.printStackTrace();
+			throw e;
+		}
+		if (imageFile != null) {
+			Image image = Image.getInstance(imageFile);
+			image.scaleAbsoluteHeight(150);
+			image.scaleAbsoluteWidth(150);
+
+			image.setBorder(1);
+			image.setBorderWidth(3);
+			image.setBorderWidthLeft(3);
+			image.setBorderWidthRight(3);
+			image.setBorderWidthBottom(3);
+			image.setAbsolutePosition(29, 500);
+			contentByte.addImage(image);
+		}
+		pdfStamper.close();
+		return byteArrayOutputStream.toByteArray();
+	}
+
+	public String handleRequestsFromHelloSign(String requestJson) throws HelloSignException {
+		JSONObject jsonObject = new JSONObject(requestJson);
+		try {
+			Event event = new Event(jsonObject);
+			boolean validRequest = event.isValid(API_KEY);
+			if (validRequest) {
+				switch (event.getTypeString()) {
+				case "callback_test":
+					LOGGER.info("Callback Test call, eventPayload: {}", event.getTypeString());
+					break;
+				case "signature_request_sent":
+					LOGGER.info("Signature Request Sent, eventPayload: {}", event.getTypeString());
+					break;
+				case "signature_request_all_signed":
+					LOGGER.info("Signature Request Signed, eventPayload: {}", event.getTypeString());
+					break;
+				default:
+					LOGGER.info("HS event occured: {}", event.getTypeString());
+					break;
+				}
+			}
+		} catch (HelloSignException e) {
+			e.printStackTrace();
+			throw e;
+		}
+
+		return "Hello API Event Received";
+	}
 
 }
-
-
-
