@@ -146,8 +146,8 @@ public class HelloSignService {
 			Document d = new Document();
 
 //			FileUtils.writeByteArrayToFile(new File("C://Users/pavankumar.sp/Desktop/HOME/StudentPhoto/S.pdf"), arr);
-			FileUtils.writeByteArrayToFile(new File("D://HelloSign/HelloSignAPI/src/main/resources/StudentClerkshipEvaluationForm.pdf"), arr);
-			d.setFile(new File("D://HelloSign/HelloSignAPI/src/main/resources/StudentClerkshipEvaluationForm.pdf"));
+			FileUtils.writeByteArrayToFile(new File("D://HelloSignAPI/HS/HelloSignAPI/src/main/resources/StudentClerkshipEvaluationForm.pdf"), arr);
+			d.setFile(new File("D://HelloSignAPI/HS/HelloSignAPI/src/main/resources/StudentClerkshipEvaluationForm.pdf"));
 			docs.add(d);
 			request.setDocuments(docs);
 
@@ -215,8 +215,8 @@ public class HelloSignService {
         ColumnText.showTextAligned(contentByte, Element.ALIGN_LEFT, Phrase.getInstance(req.getClinicalSite()), 400, 200, 0);
 		ColumnText.showTextAligned(contentByte, Element.ALIGN_LEFT, Phrase.getInstance(req.getClinicalRotation()), 400, 450, 0);
 		ColumnText.showTextAligned(contentByte, Element.ALIGN_LEFT, Phrase.getInstance(req.getTxtStudentID()), 300, 350, 0);
-		ColumnText.showTextAligned(contentByte, Element.ALIGN_LEFT, Phrase.getInstance(req.getStartDate()), 200, 250, 0);
-		ColumnText.showTextAligned(contentByte, Element.ALIGN_LEFT, Phrase.getInstance(req.getEndDate()), 150, 200, 0);
+		ColumnText.showTextAligned(contentByte, Element.ALIGN_LEFT, Phrase.getInstance(req.getStartDate()), 378, 560, 0);
+		ColumnText.showTextAligned(contentByte, Element.ALIGN_LEFT, Phrase.getInstance(req.getEndDate()), 480, 560, 0);
 
 		byte[] imageFile = null;
 		File file;
