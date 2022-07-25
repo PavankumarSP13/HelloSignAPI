@@ -9,9 +9,39 @@ public class SendFormRequest {
 	String templateId;
 	String studentEmail;
 	String ccEmail;
+	String txtStudentID;
+	String startDate;
+	String endDate;
 
-	public String getFirstName() {
+    public String getStartDate() {
+        return startDate;
+    }
+
+    public void setStartDate(String startDate) {
+        this.startDate = startDate;
+    }
+
+    public String getEndDate() {
+        return endDate;
+    }
+
+    public void setEndDate(String endDate) {
+        this.endDate = endDate;
+    }
+
+    public String getTxtStudentID() {
+        return txtStudentID;
+    }
+
+    public void setTxtStudentID(String txtStudentID) {
+        this.txtStudentID = txtStudentID;
+    }
+
+
+
+    public String getFirstName() {
 		return firstName;
+
 	}
 
 	public void setFirstName(String firstName) {
