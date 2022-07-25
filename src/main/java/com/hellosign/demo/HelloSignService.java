@@ -152,7 +152,7 @@ public class HelloSignService {
 			request.setDocuments(docs);
 
 			HelloSignClient client = new HelloSignClient(API_KEY);
-//			client.sendSignatureRequest(request);
+			client.sendSignatureRequest(request);
 //			client.sendTemplateSignatureRequest(request);
 
 			return "Sent";
@@ -210,11 +210,12 @@ public class HelloSignService {
 			e.printStackTrace();
 			throw e;
 		}
+
 		PdfContentByte contentByte = pdfStamper.getOverContent(1);
-		ColumnText.showTextAligned(contentByte, Element.ALIGN_LEFT, Phrase.getInstance(req.getFirstName()+ req.getLastName()), 190, 620, 0);
-        ColumnText.showTextAligned(contentByte, Element.ALIGN_LEFT, Phrase.getInstance(req.getClinicalSite()), 400, 200, 0);
-		ColumnText.showTextAligned(contentByte, Element.ALIGN_LEFT, Phrase.getInstance(req.getClinicalRotation()), 400, 450, 0);
-		ColumnText.showTextAligned(contentByte, Element.ALIGN_LEFT, Phrase.getInstance(req.getTxtStudentID()), 300, 350, 0);
+        ColumnText.showTextAligned(contentByte, Element.ALIGN_LEFT, Phrase.getInstance(req.getClinicalSite()), 190, 530, 0);
+		ColumnText.showTextAligned(contentByte, Element.ALIGN_LEFT, Phrase.getInstance(req.getClinicalRotation()), 190, 585, 0);
+		ColumnText.showTextAligned(contentByte, Element.ALIGN_LEFT, Phrase.getInstance(req.getTxtStudentID()), 450, 620, 0);
+		ColumnText.showTextAligned(contentByte, Element.ALIGN_LEFT, Phrase.getInstance(req.getAscii()), 270, 560, 0);
 		ColumnText.showTextAligned(contentByte, Element.ALIGN_LEFT, Phrase.getInstance(req.getStartDate()), 378, 560, 0);
 		ColumnText.showTextAligned(contentByte, Element.ALIGN_LEFT, Phrase.getInstance(req.getEndDate()), 480, 560, 0);
 
@@ -222,7 +223,7 @@ public class HelloSignService {
 		File file;
 		LOGGER.info("fetching the image and file");
 		try {
-			String imagePath = "C://Users/pavankumar.sp/Desktop/HOME/StudentPhoto/HS";
+			String imagePath = "C://Users/rinky.pavagadhi/Desktop/StudentPhotos/hs.jpg";
 			file = new File(imagePath + ".jpg");
 			imageFile = FileUtils.readFileToByteArray(file);
 		} catch (IOException e) {
