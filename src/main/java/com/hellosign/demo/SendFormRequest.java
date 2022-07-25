@@ -13,6 +13,16 @@ public class SendFormRequest {
 	String startDate;
 	String endDate;
 
+	public String getAscii() {
+		return ascii;
+	}
+
+	public void setAscii(String ascii) {
+		this.ascii = ascii;
+	}
+
+	String ascii;
+
     public String getStartDate() {
         return startDate;
     }
