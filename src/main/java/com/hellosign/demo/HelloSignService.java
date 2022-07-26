@@ -74,8 +74,8 @@ public class HelloSignService {
 			String clinicalSite = req.getClinicalSite();
 			String clinicalRotation = req.getClinicalRotation();
 			String subjectLine = lname + ", " + fname;
-			String formName = "STUDENT_CLERKSHIP_EVALUATION_FORM";
-			String emailBlurb = "Please complete this Student Portfolio for: " + subjectLine + "; " + clinicalSite
+			String formName = "COMPREHENSIVE_STUDENT_CLERKSHIP_ASSESSMENT_FORM";
+			String emailBlurb = "Please complete this Comprehensive Student Clerkship Form for: " + subjectLine + "; " + clinicalSite
 					+ " at the end of this rotation";
 			String emailSubject = subjectLine + "; " + clinicalRotation + "; " + formName + "; " + clinicalSite;
 
@@ -117,7 +117,7 @@ public class HelloSignService {
 		String inputForm = "";
 		switch (formId) {
 		case 1:
-			inputForm = HelloSignConstants.STUDENT_CLERKSHIP_EVALUATION_TEMPLATE_PATH;
+			inputForm = HelloSignConstants.COMPREHENSIVE_STUDENT_CLERKSHIP_ASSESSMENT_TEMPLATE_PATH;
 			break;
 		case 2:
 			break;
@@ -135,7 +135,7 @@ public class HelloSignService {
 
 			PdfContentByte cb = null;
 			if (formId == 1) {
-				cb = getContentByteForStudentClerkshipForm(pdfStamper, req);
+				cb = getContentByteForComprehensiveStudentClerkshipAssessmentForm(pdfStamper, req);
 			} else
 				throw new Exception("Invalid FormID");
 
@@ -156,7 +156,7 @@ public class HelloSignService {
 				image.setBorderWidthLeft(3);
 				image.setBorderWidthRight(3);
 				image.setBorderWidthBottom(3);
-				image.setAbsolutePosition(29, 500);
+				image.setAbsolutePosition(35, 503);
 				cb.addImage(image);
 			}
 			pdfStamper.close();
@@ -170,7 +170,7 @@ public class HelloSignService {
 		}
 	}
 
-	private PdfContentByte getContentByteForStudentClerkshipForm(PdfStamper pdfStamper, SendFormRequest req)
+	private PdfContentByte getContentByteForComprehensiveStudentClerkshipAssessmentForm(PdfStamper pdfStamper, SendFormRequest req)
 			throws DocumentException, IOException {
 		try {
 			PdfContentByte cb = pdfStamper.getOverContent(1);
@@ -181,22 +181,22 @@ public class HelloSignService {
 			cb.setFontAndSize(bf, 10);
 			cb.beginText();
 			// StudentName
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getFirstName() + " " + req.getLastName(), 190, 620, 0);
+			cb.showTextAligned(Element.ALIGN_LEFT, req.getFirstName() + " " + req.getLastName(), 198, 630, 0);
 			// StudentId
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getTxtStudentID(), 400, 620, 0);
+			cb.showTextAligned(Element.ALIGN_LEFT, req.getTxtStudentID(), 405, 630, 0);
 			// Clinical Rotation
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getClinicalRotation(), 190, 585, 0);
+			cb.showTextAligned(Element.ALIGN_LEFT, req.getClinicalRotation(), 198, 596, 0);
 			// CheckBox
 			if (req.getClinicalRotation().equalsIgnoreCase("Core"))
-				cb.showTextAligned(Element.ALIGN_LEFT, req.getAscii(), 286, 563, 0);
+				cb.showTextAligned(Element.ALIGN_LEFT, req.getAscii(), 291, 574, 0);
 			else
-				cb.showTextAligned(Element.ALIGN_LEFT, req.getAscii(), 286, 550, 0);
+				cb.showTextAligned(Element.ALIGN_LEFT, req.getAscii(), 291, 561, 0);
 			// StartDate
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getStartDate(), 387, 560, 0);
+			cb.showTextAligned(Element.ALIGN_LEFT, req.getStartDate(), 391, 572, 0);
 			// EndDate
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getEndDate(), 480, 560, 0);
+			cb.showTextAligned(Element.ALIGN_LEFT, req.getEndDate(), 484, 572, 0);
 			// Clinical Site
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getClinicalSite(), 190, 530, 0);
+			cb.showTextAligned(Element.ALIGN_LEFT, req.getClinicalSite(), 198, 540, 0);
 			cb.endText();
 			return cb;
 		} catch (DocumentException | IOException e) {
