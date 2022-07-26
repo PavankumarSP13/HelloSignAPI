@@ -117,9 +117,10 @@ public class HelloSignService {
 		String inputForm = "";
 		switch (formId) {
 		case 1:
-			inputForm = HelloSignConstants.COMPREHENSIVE_STUDENT_CLERKSHIP_ASSESSMENT_TEMPLATE_PATH;
+			inputForm = HelloSignConstants.STUDENT_CLERKSHIP_EVALUATION_TEMPLATE_PATH ;
 			break;
 		case 2:
+			inputForm = HelloSignConstants.COMPREHENSIVE_STUDENT_CLERKSHIP_ASSESSMENT_TEMPLATE_PATH;
 			break;
 		default:
 			break;
@@ -135,8 +136,12 @@ public class HelloSignService {
 
 			PdfContentByte cb = null;
 			if (formId == 1) {
-				cb = getContentByteForComprehensiveStudentClerkshipAssessmentForm(pdfStamper, req);
+				cb = getContentByteForStudentClerkshipForm(pdfStamper, req);
 			} else
+				if (formId == 2){
+				cb = getContentByteForComprehensiveStudentClerkshipAssessmentForm(pdfStamper, req);
+			}
+				else
 				throw new Exception("Invalid FormID");
 
 			byte[] imageFile = null;
@@ -165,6 +170,41 @@ public class HelloSignService {
 			e.printStackTrace();
 			throw e;
 		} catch (IOException e) {
+			e.printStackTrace();
+			throw e;
+		}
+	}
+
+	private PdfContentByte getContentByteForStudentClerkshipForm(PdfStamper pdfStamper, SendFormRequest req)
+			throws DocumentException, IOException {
+		try {
+			PdfContentByte cb = pdfStamper.getOverContent(1);
+			String font = "C:\\Users\\Faizanahmed.khan\\Downloads\\arial-unicode-ms.ttf";
+			BaseFont bf;
+			bf = BaseFont.createFont(font, BaseFont.IDENTITY_H, BaseFont.EMBEDDED);
+
+			cb.setFontAndSize(bf, 10);
+			cb.beginText();
+			// StudentName
+			cb.showTextAligned(Element.ALIGN_LEFT, req.getFirstName() + " " + req.getLastName(), 190, 620, 0);
+			// StudentId
+			cb.showTextAligned(Element.ALIGN_LEFT, req.getTxtStudentID(), 400, 620, 0);
+			// Clinical Rotation
+			cb.showTextAligned(Element.ALIGN_LEFT, req.getClinicalRotation(), 190, 585, 0);
+			// CheckBox
+			if (req.getClinicalRotation().equalsIgnoreCase("Core"))
+				cb.showTextAligned(Element.ALIGN_LEFT, req.getAscii(), 286, 563, 0);
+			else
+				cb.showTextAligned(Element.ALIGN_LEFT, req.getAscii(), 286, 550, 0);
+			// StartDate
+			cb.showTextAligned(Element.ALIGN_LEFT, req.getStartDate(), 387, 560, 0);
+			// EndDate
+			cb.showTextAligned(Element.ALIGN_LEFT, req.getEndDate(), 480, 560, 0);
+			// Clinical Site
+			cb.showTextAligned(Element.ALIGN_LEFT, req.getClinicalSite(), 190, 530, 0);
+			cb.endText();
+			return cb;
+		} catch (DocumentException | IOException e) {
 			e.printStackTrace();
 			throw e;
 		}
