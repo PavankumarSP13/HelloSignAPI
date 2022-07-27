@@ -12,6 +12,24 @@ public class SendFormRequest {
 	String txtStudentID;
 	String startDate;
 	String endDate;
+	String formName;
+	int formId;
+	public int getFormId() {
+		return formId;
+	}
+
+	public void setFormId(int formId) {
+		this.formId = formId;
+	}
+
+	public String getFormName() {
+		return formName;
+	}
+
+	public void setFormName(String formName) {
+		this.formName = formName;
+	}
+
 
 	public String getAscii() {
 		return ascii;
