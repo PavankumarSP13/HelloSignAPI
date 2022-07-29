@@ -12,7 +12,24 @@ public class SendFormRequest {
 	String txtStudentID;
 	String startDate;
 	String endDate;
+	String formName;
+	int formID;
 
+	public int getFormID() {
+		return formID;
+	}
+
+	public void setFormID(int formID) {
+		this.formID = formID;
+	}
+
+	public String getFormName() {
+		return formName;
+	}
+
+	public void setFormName(String formName) {
+		this.formName = formName;
+	}
 	public String getAscii() {
 		return ascii;
 	}
