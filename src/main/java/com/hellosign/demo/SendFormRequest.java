@@ -13,14 +13,13 @@ public class SendFormRequest {
 	String startDate;
 	String endDate;
 	String formName;
-	int formID;
-
-	public int getFormID() {
-		return formID;
+	int formId;
+	public int getFormId() {
+		return formId;
 	}
 
-	public void setFormID(int formID) {
-		this.formID = formID;
+	public void setFormId(int formId) {
+		this.formId = formId;
 	}
 
 	public String getFormName() {
@@ -30,6 +29,8 @@ public class SendFormRequest {
 	public void setFormName(String formName) {
 		this.formName = formName;
 	}
+
+
 	public String getAscii() {
 		return ascii;
 	}
@@ -40,33 +41,33 @@ public class SendFormRequest {
 
 	String ascii;
 
-    public String getStartDate() {
-        return startDate;
-    }
+	public String getStartDate() {
+		return startDate;
+	}
 
-    public void setStartDate(String startDate) {
-        this.startDate = startDate;
-    }
+	public void setStartDate(String startDate) {
+		this.startDate = startDate;
+	}
 
-    public String getEndDate() {
-        return endDate;
-    }
+	public String getEndDate() {
+		return endDate;
+	}
 
-    public void setEndDate(String endDate) {
-        this.endDate = endDate;
-    }
+	public void setEndDate(String endDate) {
+		this.endDate = endDate;
+	}
 
-    public String getTxtStudentID() {
-        return txtStudentID;
-    }
+	public String getTxtStudentID() {
+		return txtStudentID;
+	}
 
-    public void setTxtStudentID(String txtStudentID) {
-        this.txtStudentID = txtStudentID;
-    }
+	public void setTxtStudentID(String txtStudentID) {
+		this.txtStudentID = txtStudentID;
+	}
 
 
 
-    public String getFirstName() {
+	public String getFirstName() {
 		return firstName;
 
 	}
@@ -114,7 +115,7 @@ public class SendFormRequest {
 	public void setStudentEmail(String studentEmail) {
 		this.studentEmail = studentEmail;
 	}
-	
+
 	public String getCcEmail() {
 		return ccEmail;
 	}
