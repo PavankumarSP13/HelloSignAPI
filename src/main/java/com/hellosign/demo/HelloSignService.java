@@ -5,6 +5,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Scanner;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
@@ -37,7 +38,7 @@ public class HelloSignService {
 
 	/**
 	 * This method sends the details using the TemplateID to HS
-	 * 
+	 *
 	 * @param templateId
 	 * @param fname
 	 * @param lname
@@ -58,7 +59,7 @@ public class HelloSignService {
 
 	/**
 	 * This method sends the details with image to HS
-	 * 
+	 *
 	 * @param fname
 	 * @param lname
 	 * @param clinicalRotation
@@ -74,8 +75,8 @@ public class HelloSignService {
 			String clinicalSite = req.getClinicalSite();
 			String clinicalRotation = req.getClinicalRotation();
 			String subjectLine = lname + ", " + fname;
-			String formName = "STUDENT_CLERKSHIP_EVALUATION_FORM";
-			String emailBlurb = "Please complete this Student Portfolio for: " + subjectLine + "; " + clinicalSite
+			String formName = req.getFormName();
+			String emailBlurb = "Please complete this "+ req.getFormName()+ "for: " + subjectLine + "; " + clinicalSite
 					+ " at the end of this rotation";
 			String emailSubject = subjectLine + "; " + clinicalRotation + "; " + formName + "; " + clinicalSite;
 
@@ -94,17 +95,23 @@ public class HelloSignService {
 			request.addCC(req.getCcEmail());
 
 			// Image
-			byte[] arr = prepareDocument(1, req);
+			byte[] arr = stampDataToPdf(req.getFormId(), req);
 			List<Document> docs = new ArrayList<>();
 			Document d = new Document();
 
-			FileUtils.writeByteArrayToFile(new File("C://Users/faizanahmed.khan/Desktop/StudentPhotos/d.pdf"), arr);
-			d.setFile(new File("C://Users/faizanahmed.khan/Desktop/StudentPhotos/d.pdf"));
+			if(req.formId==1) {
+				FileUtils.writeByteArrayToFile(new File("./out/StudentClerkshipEvaluation.pdf"), arr);
+				d.setFile(new File("./StudentClerkshipEvaluationForm.pdf"));
+			}
+			if(req.formId==2) {
+				FileUtils.writeByteArrayToFile(new File("./out/StudentPortfolioForm.pdf"), arr);
+				d.setFile(new File("./StudentPortfolioForm.pdf"));
+			}
 			docs.add(d);
 			request.setDocuments(docs);
 
 			HelloSignClient client = new HelloSignClient(API_KEY);
-			client.sendSignatureRequest(request);
+			//client.sendSignatureRequest(request);
 
 			return "Sent";
 		} catch (Exception e) {
@@ -113,16 +120,17 @@ public class HelloSignService {
 		}
 	}
 
-	private byte[] prepareDocument(int formId, SendFormRequest req) throws Exception {
+	private byte[] stampDataToPdf(int formId, SendFormRequest req) throws Exception {
 		String inputForm = "";
 		switch (formId) {
-		case 1:
-			inputForm = HelloSignConstants.STUDENT_CLERKSHIP_EVALUATION_TEMPLATE_PATH;
-			break;
-		case 2:
-			break;
-		default:
-			break;
+			case 1:
+				inputForm = HelloSignConstants.STUDENT_CLERKSHIP_EVALUATION_TEMPLATE_PATH;
+				break;
+			case 2:
+				inputForm = HelloSignConstants.STUDENT_PORTFOLIO_TEMPLATE_PATH;
+				break;
+			default:
+				break;
 		}
 
 		try {
@@ -136,13 +144,17 @@ public class HelloSignService {
 			PdfContentByte cb = null;
 			if (formId == 1) {
 				cb = getContentByteForStudentClerkshipForm(pdfStamper, req);
-			} else
+			}
+			else if(formId ==2){
+				cb = getContentByteForStudentPortfolioForm(pdfStamper, req);
+			}
+			else
 				throw new Exception("Invalid FormID");
 
 			byte[] imageFile = null;
 			File file;
 			LOGGER.info("fetching the image and file");
-			String imagePath = "C://Users/faizanahmed.khan/Desktop/StudentPhotos/faiz";
+			String imagePath = "C:\\Users\\rinky.pavagadhi\\Desktop\\StudentPhotos\\hs.jpg";
 			file = new File(imagePath + ".jpg");
 			imageFile = FileUtils.readFileToByteArray(file);
 
@@ -170,13 +182,45 @@ public class HelloSignService {
 		}
 	}
 
+	private PdfContentByte getContentByteForStudentPortfolioForm(PdfStamper pdfStamper, SendFormRequest req) throws DocumentException, IOException{
+		try {
+			PdfContentByte cb = pdfStamper.getOverContent(1);
+			String font = "./arial-unicode-ms.ttf";
+			BaseFont bf = BaseFont.createFont(font, BaseFont.IDENTITY_H, BaseFont.EMBEDDED);
+
+			cb.setFontAndSize(bf, 10);
+			cb.beginText();
+			// StudentName
+			cb.showTextAligned(Element.ALIGN_LEFT, req.getFirstName() + " " + req.getLastName(), 200, 630, 0);
+			// StudentId
+			cb.showTextAligned(Element.ALIGN_LEFT, req.getTxtStudentID(), 400, 630, 0);
+			// Clinical Rotation
+			cb.showTextAligned(Element.ALIGN_LEFT, req.getClinicalRotation(), 200, 595, 0);
+			// CheckBox
+			if (req.getClinicalRotation().equalsIgnoreCase("Core"))
+				cb.showTextAligned(Element.ALIGN_LEFT, req.getAscii(), 286, 573, 0);
+			else
+				cb.showTextAligned(Element.ALIGN_LEFT, req.getAscii(), 286, 560, 0);
+			// StartDate
+			cb.showTextAligned(Element.ALIGN_LEFT, req.getStartDate(), 387, 570, 0);
+			// EndDate
+			cb.showTextAligned(Element.ALIGN_LEFT, req.getEndDate(), 480, 570, 0);
+			// Clinical Site
+			cb.showTextAligned(Element.ALIGN_LEFT, req.getClinicalSite(), 200, 540, 0);
+			cb.endText();
+			return cb;
+		} catch (DocumentException | IOException e) {
+			e.printStackTrace();
+			throw e;
+		}
+	}
+
 	private PdfContentByte getContentByteForStudentClerkshipForm(PdfStamper pdfStamper, SendFormRequest req)
 			throws DocumentException, IOException {
 		try {
 			PdfContentByte cb = pdfStamper.getOverContent(1);
-			String font = "C:\\Users\\Faizanahmed.khan\\Downloads\\arial-unicode-ms.ttf";
-			BaseFont bf;
-			bf = BaseFont.createFont(font, BaseFont.IDENTITY_H, BaseFont.EMBEDDED);
+			String font = "C:\\Users\\rinky.pavagadhi\\Downloads\\arial-unicode-ms.ttf";
+			BaseFont bf = BaseFont.createFont(font, BaseFont.IDENTITY_H, BaseFont.EMBEDDED);
 
 			cb.setFontAndSize(bf, 10);
 			cb.beginText();
@@ -212,18 +256,18 @@ public class HelloSignService {
 			boolean validRequest = event.isValid(API_KEY);
 			if (validRequest) {
 				switch (event.getTypeString()) {
-				case "callback_test":
-					LOGGER.info("Callback Test call, eventPayload: {}", event.getTypeString());
-					break;
-				case "signature_request_sent":
-					LOGGER.info("Signature Request Sent, eventPayload: {}", event.getTypeString());
-					break;
-				case "signature_request_all_signed":
-					LOGGER.info("Signature Request Signed, eventPayload: {}", event.getTypeString());
-					break;
-				default:
-					LOGGER.info("HS event occured: {}", event.getTypeString());
-					break;
+					case "callback_test":
+						LOGGER.info("Callback Test call, eventPayload: {}", event.getTypeString());
+						break;
+					case "signature_request_sent":
+						LOGGER.info("Signature Request Sent, eventPayload: {}", event.getTypeString());
+						break;
+					case "signature_request_all_signed":
+						LOGGER.info("Signature Request Signed, eventPayload: {}", event.getTypeString());
+						break;
+					default:
+						LOGGER.info("HS event occured: {}", event.getTypeString());
+						break;
 				}
 			}
 		} catch (HelloSignException e) {
