@@ -19,11 +19,11 @@ public class HelloSignController {
 	@Autowired
 	HelloSignService helloSignService;
 
-	@PostMapping("sendformUsingTemplateId")
-	public String sendFormUsingTemplateId(@RequestBody SendFormRequest req) throws HelloSignException {
-		LOGGER.info("Invoked sendFormUsingTemplateId");
-		return helloSignService.sendFormUsingTemplateId(req);
-	}
+//	@PostMapping("sendformUsingTemplateId")
+//	public String sendFormUsingTemplateId(@RequestBody SendFormRequest req) throws HelloSignException {
+//		LOGGER.info("Invoked sendFormUsingTemplateId");
+//		return helloSignService.sendFormUsingTemplateId(req);
+//	}
 
 	@PostMapping("sendformWithImage")
 	public String sendFormWithImage(@RequestBody SendFormRequest req) throws Exception {

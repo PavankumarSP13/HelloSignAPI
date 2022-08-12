@@ -62,6 +62,13 @@
 		</dependency>
 
 		<dependency>
+		<groupId>org.openapitools</groupId>
+		<artifactId>openapi-java-client</artifactId>
+		<version>3.0.0</version>
+		<scope>compile</scope>
+		</dependency>
+
+		<dependency>
 			<groupId>com.hellosign</groupId>
 			<artifactId>hellosign-java-sdk</artifactId>
 			<version>5.2.3</version>
