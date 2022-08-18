@@ -19,8 +19,14 @@ import org.springframework.stereotype.Service;
 import com.hellosign.openapi.ApiClient;
 import com.hellosign.openapi.ApiException;
 import com.hellosign.openapi.Configuration;
+import com.hellosign.openapi.api.SignatureRequestApi;
 import com.hellosign.openapi.api.TemplateApi;
 import com.hellosign.openapi.auth.HttpBasicAuth;
+import com.hellosign.openapi.model.SignatureRequestGetResponse;
+import com.hellosign.openapi.model.SignatureRequestSendWithTemplateRequest;
+import com.hellosign.openapi.model.SubCustomField;
+import com.hellosign.openapi.model.SubSignatureRequestTemplateSigner;
+import com.hellosign.openapi.model.SubSigningOptions;
 import com.hellosign.openapi.model.TemplateUpdateFilesRequest;
 import com.hellosign.openapi.model.TemplateUpdateFilesResponse;
 import com.hellosign.sdk.HelloSignClient;
@@ -159,21 +165,69 @@ public class HelloSignService {
 			String emailSubject = subjectLine + "; " + clinicalRotation + "; " + formName + "; " + clinicalSite;
 
 			// Custom Fields
-			Map<String, String> customFields = getCustomFields(fname, lname, clinicalRotation, clinicalSite, id,
-					startDate, endDate);
+//			Map<String, String> customFields = getCustomFields(fname, lname, clinicalRotation, clinicalSite, id,
+//					startDate, endDate);
+			
+			ApiClient defaultClient = Configuration.getDefaultApiClient();
+			SignatureRequestApi api = new SignatureRequestApi(defaultClient);
 
-			TemplateSignatureRequest request = new TemplateSignatureRequest();
-			request.setTitle(formName);
-			request.setSubject(emailSubject);
-			request.setMessage(emailBlurb);
-			request.setSigner("Student", req.getStudentEmail(), fname);
-			request.setClientId(CLIENT_ID);
-			request.setTemplateId(updatedTemplateID);
-			request.setTestMode(true);
-			request.setCustomFields(customFields);
+			SubSignatureRequestTemplateSigner signer1 = new SubSignatureRequestTemplateSigner().role("Student")
+					.emailAddress(req.getStudentEmail()).name("George");
+			ArrayList<SubCustomField> customFields = new ArrayList<>();
 
-			HelloSignClient client = new HelloSignClient(API_KEY);
-			client.sendTemplateSignatureRequest(request);
+			SubCustomField customField1 = new SubCustomField().name("StudentName").value(fname + " " + lname);
+			SubCustomField customField2 = new SubCustomField().name("txtStudentID").value(id);
+			SubCustomField customField3 = new SubCustomField().name("ClinicalRotation").value(clinicalRotation);
+			SubCustomField customField4 = new SubCustomField().name("StartDate").value(startDate);
+			SubCustomField customField5 = new SubCustomField().name("EndDate").value(endDate);
+			SubCustomField customField7 = new SubCustomField().name("ClinicalRotationSite").value(clinicalSite);
+			SubCustomField customField6 = new SubCustomField();
+			if (clinicalRotation.equalsIgnoreCase("Elective")) {
+				customField6.name("chkElective").value("true");
+			} else {
+				customField6.name("chkCore").value("true");
+			}
+			customFields.add(customField1);
+			customFields.add(customField2);
+			customFields.add(customField3);
+			customFields.add(customField4);
+			customFields.add(customField5);
+			customFields.add(customField6);
+			customFields.add(customField7);
+
+			SubSigningOptions signingOptions = new SubSigningOptions().draw(true).type(true).upload(true).phone(false)
+					.defaultType(SubSigningOptions.DefaultTypeEnum.DRAW);
+
+			SignatureRequestSendWithTemplateRequest data = new SignatureRequestSendWithTemplateRequest()
+					.templateIds(List.of(updatedTemplateID)).subject(emailSubject).title(formName)
+					.message(emailBlurb).signers(List.of(signer1))
+					.customFields(customFields).signingOptions(signingOptions).testMode(true);
+
+			try {
+				SignatureRequestGetResponse result = api.signatureRequestSendWithTemplate(data);
+				System.out.println(result);
+			} catch (ApiException e) {
+				System.err.println("Exception when calling AccountApi#accountCreate");
+				System.err.println("Status code: " + e.getCode());
+				System.err.println("Reason: " + e.getResponseBody());
+				System.err.println("Response headers: " + e.getResponseHeaders());
+				e.printStackTrace();
+			}
+			
+			
+			
+	//		TemplateSignatureRequest request = new TemplateSignatureRequest();
+//			request.setTitle(formName);
+//			request.setSubject(emailSubject);
+//			request.setMessage(emailBlurb);
+//			request.setSigner("Student", req.getStudentEmail(), fname);
+//			request.setClientId(CLIENT_ID);
+//			request.setTemplateId(updatedTemplateID);
+//			request.setTestMode(true);
+//			request.setCustomFields(customFields);
+
+//			HelloSignClient client = new HelloSignClient(API_KEY);
+//			client.sendTemplateSignatureRequest(data);
 
 			// Delete the template
 			deleteTemplate(updatedTemplateID);
@@ -185,6 +239,8 @@ public class HelloSignService {
 			throw e;
 		}
 	}
+
+
 
 	private void init() {
 
@@ -266,7 +322,7 @@ public class HelloSignService {
 			byte[] imageFile = null;
 			File file;
 			LOGGER.info("fetching the image and file");
-			String imagePath = "C://Users/rinky.pavagadhi/Desktop/StudentPhotos/hs";
+			String imagePath = "C://Users/faizanahmed.khan/Desktop/StudentPhotos/faiz";
 			file = new File(imagePath + ".jpg");
 			imageFile = FileUtils.readFileToByteArray(file);
 
