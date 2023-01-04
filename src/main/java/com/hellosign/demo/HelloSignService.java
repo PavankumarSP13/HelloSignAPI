@@ -8,25 +8,45 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.hellosign.sdk.resource.TemplateSignatureRequest;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.web.multipart.MultipartFile;
 
+import com.hellosign.openapi.ApiClient;
+import com.hellosign.openapi.ApiException;
+import com.hellosign.openapi.Configuration;
+import com.hellosign.openapi.api.SignatureRequestApi;
+import com.hellosign.openapi.api.TemplateApi;
+import com.hellosign.openapi.auth.HttpBasicAuth;
+import com.hellosign.openapi.model.FileResponse;
+import com.hellosign.openapi.model.SignatureRequestGetResponse;
+import com.hellosign.openapi.model.SignatureRequestSendWithTemplateRequest;
+import com.hellosign.openapi.model.SubCC;
+import com.hellosign.openapi.model.SubCustomField;
+import com.hellosign.openapi.model.SubSignatureRequestTemplateSigner;
+import com.hellosign.openapi.model.SubSigningOptions;
+import com.hellosign.openapi.model.TemplateUpdateFilesRequest;
+import com.hellosign.openapi.model.TemplateUpdateFilesResponse;
 import com.hellosign.sdk.HelloSignClient;
 import com.hellosign.sdk.HelloSignException;
 import com.hellosign.sdk.resource.Event;
-import com.hellosign.sdk.resource.SignatureRequest;
+import com.hellosign.sdk.resource.TemplateSignatureRequest;
 import com.hellosign.sdk.resource.support.Document;
-import com.hellosign.sdk.resource.support.Signer;
 import com.itextpdf.text.DocumentException;
-import com.itextpdf.text.Element;
 import com.itextpdf.text.Image;
-import com.itextpdf.text.pdf.BaseFont;
 import com.itextpdf.text.pdf.PdfContentByte;
 import com.itextpdf.text.pdf.PdfReader;
 import com.itextpdf.text.pdf.PdfStamper;
@@ -37,6 +57,19 @@ public class HelloSignService {
 	private static final Logger LOGGER = LoggerFactory.getLogger(HelloSignService.class);
 	private static final String API_KEY = "ac2685093dd7cc99066561d0446e49ffd7c9d5179cec3797b3a65ba86a53e934";
 	private static final String CLIENT_ID = "f8ff965827dfae4528fc388077a8bd93";
+
+	// Integration
+	@Value("${baseUrl}")
+	private String baseUrl;
+
+	@Value("${accountId}")
+	private String accountId;
+
+	@Value("${helloSignUserName}")
+	private String helloSignUserName;
+
+	@Value("${helloSignPassword}")
+	private String helloSignPassword;
 
 	/**
 	 * This method sends the details using the TemplateID to HS
@@ -58,36 +91,34 @@ public class HelloSignService {
 			String clinicalRotation = req.getClinicalRotation();
 			String subjectLine = lname + ", " + fname;
 			String formName = req.getFormName();
-			String Id= req.getTxtStudentID();
+			String Id = req.getTxtStudentID();
 			String startDate = req.getStartDate();
 			String endDate = req.getEndDate();
 
 			String emailBlurb = "Please complete this" + formName + " for: " + subjectLine + "; " + clinicalSite
 					+ " at the end of this rotation";
-			String emailSubject = subjectLine + "; " + clinicalRotation + "; " + formName + "; " + clinicalSite;
 
 			// Custom Fields
-			Map<String, String> customFields = getCustomFields(fname, lname, clinicalRotation, clinicalSite, Id, startDate, endDate);
+			Map<String, String> customFields = getCustomFields(fname, lname, clinicalRotation, clinicalSite, Id,
+					startDate, endDate);
 
 			TemplateSignatureRequest request = new TemplateSignatureRequest();
 			request.setTitle(formName);
-			request.setSubject(emailSubject);
+
 			request.setMessage(emailBlurb);
-			request.setSigner("DME", req.getStudentEmail(), fname);
-//            if (req.getCcEmail() != null)
-//                request.setCC("DME", req.getCcEmail());
+			request.setSigner("Student", req.getStudentEmail(), fname);
 			request.setClientId(CLIENT_ID);
 			request.setTemplateId(req.getTemplateId());
 			request.setTestMode(true);
 			request.setCustomFields(customFields);
 
 			// Image
-			byte[] arr = prepareDocument(req.getFormId(), req);
+			byte[] arr = prepareDocument(req.getFormId(), null);
 			List<Document> docs = new ArrayList<>();
 			Document d = new Document();
 			File outFile = null;
 			if (req.getFormId() == 1) {
-				outFile = new File("./output/StudentClerkshipEvaluationForm.pdf");
+				outFile = new File("./out/StudentClerkshipEvaluationForm.pdf");
 			}
 			FileUtils.writeByteArrayToFile(outFile, arr);
 			d.setFile(outFile);
@@ -104,7 +135,7 @@ public class HelloSignService {
 	}
 
 	private Map<String, String> getCustomFields(String fname, String lname, String clinicalRotation,
-												String clinicalSite, String txtStudentID, String startDate, String endDate) {
+			String clinicalSite, String txtStudentID, String startDate, String endDate) {
 		Map<String, String> customFields = new HashMap<>();
 		customFields.put("StudentName", fname + " " + lname);
 		customFields.put("txtStudentID", txtStudentID);
@@ -119,9 +150,10 @@ public class HelloSignService {
 		return customFields;
 	}
 
-
 	/**
 	 * This method sends the details with image to HS
+	 * 
+	 * @param file
 	 *
 	 * @param fname
 	 * @param lname
@@ -131,54 +163,79 @@ public class HelloSignService {
 	 * @return
 	 * @throws Exception
 	 */
-	public String sendFormWithImage(SendFormRequest req) throws Exception {
+	public String sendFormWithImage(SendFormRequest req, MultipartFile file) throws Exception {
 		try {
+			//this method Update the details by creating a new copy of existing template & returns updated template ID
+			String updatedTemplateID = updateTemplateRequest(req, file);
+
+			if (null == updatedTemplateID) {
+				return "Unable to Send";
+			}
+
+			Thread.sleep(5000);
+// student FormDetails
 			String fname = req.getFirstName();
 			String lname = req.getLastName();
 			String clinicalSite = req.getClinicalSite();
 			String clinicalRotation = req.getClinicalRotation();
 			String subjectLine = lname + ", " + fname;
 			String formName = req.getFormName();
+			String id = req.getTxtStudentID();
+			String startDate = req.getStartDate();
+			String endDate = req.getEndDate();
+
 			String emailBlurb = "Please complete this" + formName + " for: " + subjectLine + "; " + clinicalSite
 					+ " at the end of this rotation";
 			String emailSubject = subjectLine + "; " + clinicalRotation + "; " + formName + "; " + clinicalSite;
 
-			// Using signature Request
-			SignatureRequest request = new SignatureRequest();
-			List<Signer> signers = new ArrayList<>();
-			Signer signer = new Signer(req.getStudentEmail(), "DME");
-			signers.add(signer);
-			request.setTitle(formName);
-			request.setSubject(emailSubject);
-			request.setMessage(emailBlurb);
-			request.setSigners(signers);
-			request.setClientId(CLIENT_ID);
-			request.setTestMode(true);
-			request.setTestMode(true);
-			request.addCC(req.getCcEmail());
+			ApiClient defaultClient = Configuration.getDefaultApiClient();
+			SignatureRequestApi api = new SignatureRequestApi(defaultClient);
 
-			// Image
-			byte[] arr = prepareDocument(req.getFormId(), req);
-			List<Document> docs = new ArrayList<>();
-			Document d = new Document();
-			File outFile = null;
-			if (req.getFormId() == 1) {
-				outFile = new File("./output/StudentClerkshipEvaluationForm.pdf");
-			} else if (req.getFormId() == 3) {
-				outFile = new File("./output/MidClerkshipAssessmentForm.pdf");
-			} else if (req.getFormId() == 4) {
-				outFile = new File("./output/StudentFacultyEvaluationForm.pdf");
-			} else if (req.getFormId() == 6) {
-				outFile = new File("./output/AUA_Formative_OSCE.pdf");
+			SubSignatureRequestTemplateSigner signer1 = new SubSignatureRequestTemplateSigner().role("Student")
+					.emailAddress(req.getStudentEmail()).name("George");
+
+//			CC mail
+//			SubCC cc1 = new SubCC().role("DME").emailAddress(req.getCcEmail());
+			ArrayList<SubCustomField> customFields = new ArrayList<>();
+
+			SubCustomField customField1 = new SubCustomField().name("StudentName").value(fname + " " + lname);
+			SubCustomField customField2 = new SubCustomField().name("txtStudentID").value(id);
+			SubCustomField customField3 = new SubCustomField().name("ClinicalRotation").value(clinicalRotation);
+			SubCustomField customField4 = new SubCustomField().name("StartDate").value(startDate);
+			SubCustomField customField5 = new SubCustomField().name("EndDate").value(endDate);
+			SubCustomField customField7 = new SubCustomField().name("ClinicalRotationSite").value(clinicalSite);
+			SubCustomField customField6 = new SubCustomField();
+			if (clinicalRotation.equalsIgnoreCase("Elective")) {
+				customField6.name("chkElective").value("true");
+			} else {
+				customField6.name("chkCore").value("true");
 			}
-			FileUtils.writeByteArrayToFile(outFile, arr);
-			d.setFile(outFile);
-			docs.add(d);
-			request.setDocuments(docs);
-			HelloSignClient client = new HelloSignClient(API_KEY);
-			client.sendSignatureRequest(request);
+			customFields.add(customField1);
+			customFields.add(customField2);
+			customFields.add(customField3);
+			customFields.add(customField4);
+			customFields.add(customField5);
+			customFields.add(customField6);
+			customFields.add(customField7);
 
-			return "Sent";
+			SubSigningOptions signingOptions = new SubSigningOptions().draw(true).type(true).upload(true).phone(false)
+					.defaultType(SubSigningOptions.DefaultTypeEnum.DRAW);
+
+			SignatureRequestSendWithTemplateRequest data = new SignatureRequestSendWithTemplateRequest()
+					.templateIds(List.of(updatedTemplateID)).subject(emailSubject).title(formName).message(emailBlurb)
+					.signers(List.of(signer1)).customFields(customFields)
+//					.ccs(List.of(cc1))
+					.signingOptions(signingOptions).testMode(true);
+
+			SignatureRequestGetResponse result = null;
+			// sends the template with signatureReaquest
+			result = api.signatureRequestSendWithTemplate(data);
+//			System.out.println("Result:: " + result.getSignatureRequest().getSignatureRequestId());
+
+			// Delete the template
+			deleteTemplate(updatedTemplateID);
+
+			return result.getSignatureRequest().getSignatureRequestId();
 
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -186,88 +243,90 @@ public class HelloSignService {
 		}
 	}
 
-	private byte[] prepareDocument(int formId, SendFormRequest req) throws Exception {
-		String inputForm = "";
-		switch (formId) {
-			case 1:
-				inputForm = HelloSignConstants.STUDENT_CLERKSHIP_EVALUATION_TEMPLATE_PATH;
-				break;
-			case 2:
-				inputForm = HelloSignConstants.COMPREHENSIVE_CLERKSHIP_TEMPLATE_PATH;
-				break;
-			case 3:
-				inputForm = HelloSignConstants.MID_CLERKSHIP_EVALUATION_TEMPLATE_PATH;
-				break;
-			case 4:
-				inputForm = HelloSignConstants.STUDENT_FACULTY_EVALUATION_TEMPLATE_PATH;
-				break;
-			case 5:
-				inputForm = HelloSignConstants.STUDENT_PORTFOLIO_TEMPLATE_PATH;
-				break;
-			case 6:
-				inputForm = HelloSignConstants.AUA_CORE_OSCE_TEMPLATE_PATH;
-				break;
+	// HelloSign Configuration
+	private void init() {
+        ApiClient defaultClient = Configuration.getDefaultApiClient();
+		// Configure HTTP basic authorization: api_key
+		HttpBasicAuth api_key = (HttpBasicAuth) defaultClient.getAuthentication("api_key");
+		api_key.setUsername(API_KEY);
+	}
 
-			default:
-				break;
-		}
+	//This method creates a new copy of existing template & returns the new template Id
+	private String updateTemplateRequest(SendFormRequest req, MultipartFile file) throws Exception {
+
+		ApiClient defaultClient = Configuration.getDefaultApiClient();
+		init();
+		// Stamp image and data
+		byte[] arr = prepareDocument(req.getFormId(), file);
+		File outFile = null;
+		outFile = new File("./out/StudentClerkshipEvaluationForm.pdf");
+
+		FileUtils.writeByteArrayToFile(outFile, arr);
+
+		TemplateUpdateFilesRequest data = new TemplateUpdateFilesRequest().file(List.of(outFile));
 
 		try {
-			byte[] templateBytes = IOUtils.toByteArray(new ClassPathResource(inputForm).getInputStream());
+			TemplateApi api = new TemplateApi(defaultClient);
+			TemplateUpdateFilesResponse result = api.templateUpdateFiles(req.templateId, data);
+//			System.out.println(result);
+			return result.getTemplate().getTemplateId();
+		} catch (ApiException e) {
+			e.printStackTrace();
+		}
+		return null;
+	}
+
+	//This method deletes the new copy of existing template
+	private void deleteTemplate(String templateId) throws Exception {
+        ApiClient defaultClient = Configuration.getDefaultApiClient();
+        // Configure HTTP basic authorization: api_key
+		init();
+		TemplateApi api = new TemplateApi(defaultClient);
+        try {
+			api.templateDelete(templateId);
+		} catch (ApiException e) {
+			e.printStackTrace();
+		}
+
+	}
+
+	//This method reads the image & stamp the image to the PDF
+	private byte[] prepareDocument(int formId, MultipartFile studentImage) throws Exception {
+//		String inputForm = "";
+//		switch (formId) {
+//		case 1:
+//			inputForm = HelloSignConstants.STUDENT_CLERKSHIP_EVALUATION_TEMPLATE_PATH;
+//			break;
+//
+//		default:
+//			break;
+//		}
+
+		try {
+			byte[] templateBytes = IOUtils
+					.toByteArray(new ClassPathResource("StudentClerkshipEvaluationForm.pdf").getInputStream());
+//			System.out.println("TemplateBytes:" + templateBytes);
 			PdfReader pdfReader = new PdfReader(templateBytes);
 
 			ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
 			PdfStamper pdfStamper = null;
 			pdfStamper = new PdfStamper(pdfReader, byteArrayOutputStream);
 
-			PdfContentByte cb = null;
-			if (formId == 1) {
-				cb = getContentByteForStudentClerkshipForm(pdfStamper, req);
-			} else if (formId == 3) {
-				cb = getContentByteForMidClerkshipForm(pdfStamper, req);
-			} else if (formId == 4) {
-				cb = getContentByteForStudentFacultyForm(pdfStamper, req);
-			} else if (formId == 6) {
-				cb = getContentByteForCoreOsceForm(pdfStamper, req);
-			} else if (formId == 5) {
-				cb = getContentByteForStudentPortfolioForm(pdfStamper, req);
-			} else if (formId == 2) {
-				cb = getContentByteForComprehensiveStudentClerkshipForm(pdfStamper, req);
-			} else {
-				throw new Exception("Invalid FormID");
-			}
-
-			byte[] imageFile = null;
-			File file;
-			LOGGER.info("fetching the image and file");
-			String imagePath = "C://Users/faizanahmed.khan/Desktop/StudentPhotos/faiz";
-			file = new File(imagePath + ".jpg");
-			imageFile = FileUtils.readFileToByteArray(file);
-
+			PdfContentByte cb = pdfStamper.getOverContent(1);
+			byte[] imageFile = studentImage.getBytes();
 			if (imageFile != null) {
-				if (formId != 6) {
-					Image image = Image.getInstance(imageFile);
+				    Image image = Image.getInstance(imageFile);
 					image.scaleAbsoluteHeight(150);
 					image.scaleAbsoluteWidth(150);
-
 					image.setBorder(1);
 					image.setBorderWidth(3);
 					image.setBorderWidthLeft(3);
 					image.setBorderWidthRight(3);
 					image.setBorderWidthBottom(3);
+					if (formId != 6) {
 					image.setAbsolutePosition(29, 500);
 					cb.addImage(image);
-
-				} else {
-					Image image = Image.getInstance(imageFile);
-					image.scaleAbsoluteHeight(150);
-					image.scaleAbsoluteWidth(150);
-
-					image.setBorder(1);
-					image.setBorderWidth(3);
-					image.setBorderWidthLeft(3);
-					image.setBorderWidthRight(3);
-					image.setBorderWidthBottom(3);
+                    } else {
 					image.setAbsolutePosition(34, 470);
 					cb.addImage(image);
 				}
@@ -283,214 +342,7 @@ public class HelloSignService {
 		}
 	}
 
-	private PdfContentByte getContentByteForStudentClerkshipForm(PdfStamper pdfStamper, SendFormRequest req)
-			throws DocumentException, IOException {
-		try {
-			PdfContentByte cb = pdfStamper.getOverContent(1);
-			String font = "C:\\Users\\Faizanahmed.khan\\Downloads\\arial-unicode-ms.ttf";
-			BaseFont bf;
-			bf = BaseFont.createFont(font, BaseFont.IDENTITY_H, BaseFont.EMBEDDED);
-
-			cb.setFontAndSize(bf, 10);
-			cb.beginText();
-			// StudentName
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getFirstName() + " " + req.getLastName(), 190, 620, 0);
-			// StudentId
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getTxtStudentID(), 400, 620, 0);
-			// Clinical Rotation
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getClinicalRotation(), 190, 585, 0);
-			// CheckBox
-			if (req.getClinicalRotation().equalsIgnoreCase("Core"))
-				cb.showTextAligned(Element.ALIGN_LEFT, req.getAscii(), 286, 563, 0);
-			else
-				cb.showTextAligned(Element.ALIGN_LEFT, req.getAscii(), 286, 550, 0);
-			// StartDate
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getStartDate(), 387, 560, 0);
-			// EndDate
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getEndDate(), 480, 560, 0);
-			// Clinical Site
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getClinicalSite(), 190, 530, 0);
-			cb.endText();
-			return cb;
-		} catch (DocumentException | IOException e) {
-			e.printStackTrace();
-			throw e;
-		}
-	}
-
-	private PdfContentByte getContentByteForStudentPortfolioForm(PdfStamper pdfStamper, SendFormRequest req) throws DocumentException, IOException{
-		try {
-			PdfContentByte cb = pdfStamper.getOverContent(1);
-			String font = "C:\\Users\\Faizanahmed.khan\\Downloads\\arial-unicode-ms.ttf";
-			BaseFont bf = BaseFont.createFont(font, BaseFont.IDENTITY_H, BaseFont.EMBEDDED);
-			cb.setFontAndSize(bf, 10);
-			cb.beginText();
-			// StudentName
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getFirstName() + " " + req.getLastName(), 200, 630, 0);
-			// StudentId
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getTxtStudentID(), 400, 630, 0);
-			// Clinical Rotation
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getClinicalRotation(), 200, 595, 0);
-			// CheckBox
-			if (req.getClinicalRotation().equalsIgnoreCase("Core"))
-				cb.showTextAligned(Element.ALIGN_LEFT, req.getAscii(), 286, 573, 0);
-			else
-				cb.showTextAligned(Element.ALIGN_LEFT, req.getAscii(), 286, 560, 0);
-			// StartDate
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getStartDate(), 387, 570, 0);
-			// EndDate
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getEndDate(), 480, 570, 0);
-			// Clinical Site
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getClinicalSite(), 200, 540, 0);
-			cb.endText();
-			return cb;
-		} catch (DocumentException | IOException e) {
-			e.printStackTrace();
-			throw e;
-		}
-	}
-
-	private PdfContentByte getContentByteForMidClerkshipForm(PdfStamper pdfStamper, SendFormRequest req)
-			throws DocumentException, IOException {
-		try {
-			PdfContentByte cb = pdfStamper.getOverContent(1);
-			String font = "C:\\Users\\Faizanahmed.khan\\Downloads\\arial-unicode-ms.ttf";
-			BaseFont bf;
-			bf = BaseFont.createFont(font, BaseFont.IDENTITY_H, BaseFont.EMBEDDED);
-
-			cb.setFontAndSize(bf, 10);
-			cb.beginText();
-			// StudentName
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getFirstName() + " " + req.getLastName(), 190, 610, 0);
-			// StudentId
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getTxtStudentID(), 400, 610, 0);
-			// Clinical Rotation
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getClinicalRotation(), 190, 577, 0);
-			// CheckBox
-			if (req.getClinicalRotation().equalsIgnoreCase("Core"))
-				cb.showTextAligned(Element.ALIGN_LEFT, req.getAscii(), 286, 555, 0);
-			else
-				cb.showTextAligned(Element.ALIGN_LEFT, req.getAscii(), 286, 542, 0);
-			// StartDate
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getStartDate(), 387, 553, 0);
-			// EndDate
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getEndDate(), 480, 553, 0);
-			// Clinical Site
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getClinicalSite(), 190, 522, 0);
-			cb.endText();
-			return cb;
-		} catch (DocumentException | IOException e) {
-			e.printStackTrace();
-			throw e;
-		}
-	}
-
-	private PdfContentByte getContentByteForComprehensiveStudentClerkshipForm(PdfStamper pdfStamper, SendFormRequest req)
-			throws DocumentException, IOException {
-		try {
-			PdfContentByte cb = pdfStamper.getOverContent(1);
-			String font = "C:\\Users\\Faizanahmed.khan\\Downloads\\arial-unicode-ms.ttf";
-
-			BaseFont bf;
-			bf = BaseFont.createFont(font, BaseFont.IDENTITY_H, BaseFont.EMBEDDED);
-
-			cb.setFontAndSize(bf, 10);
-			cb.beginText();
-			// StudentName
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getFirstName() + " " + req.getLastName(), 198, 630, 0);
-			// StudentId
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getTxtStudentID(), 405, 630, 0);
-			// Clinical Rotation
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getClinicalRotation(), 198, 596, 0);
-			// CheckBox
-			if (req.getClinicalRotation().equalsIgnoreCase("Core"))
-				cb.showTextAligned(Element.ALIGN_LEFT, req.getAscii(), 291, 574, 0);
-			else
-				cb.showTextAligned(Element.ALIGN_LEFT, req.getAscii(), 291, 561, 0);
-			// StartDate
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getStartDate(), 391, 572, 0);
-			// EndDate
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getEndDate(), 484, 572, 0);
-			// Clinical Site
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getClinicalSite(), 198, 540, 0);
-			cb.endText();
-			return cb;
-		} catch (DocumentException | IOException e) {
-			e.printStackTrace();
-			throw e;
-		}
-	}
-
-	private PdfContentByte getContentByteForStudentFacultyForm(PdfStamper pdfStamper, SendFormRequest req)
-			throws DocumentException, IOException {
-		try {
-			PdfContentByte cb = pdfStamper.getOverContent(1);
-			String font = "C:\\Users\\Faizanahmed.khan\\Downloads\\arial-unicode-ms.ttf";
-			BaseFont bf;
-			bf = BaseFont.createFont(font, BaseFont.IDENTITY_H, BaseFont.EMBEDDED);
-
-			cb.setFontAndSize(bf, 10);
-			cb.beginText();
-			// StudentName
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getFirstName() + " " + req.getLastName(), 190, 620, 0);
-			// StudentId
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getTxtStudentID(), 400, 620, 0);
-			// Clinical Rotation
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getClinicalRotation(), 190, 585, 0);
-			// CheckBox
-			if (req.getClinicalRotation().equalsIgnoreCase("Core"))
-				cb.showTextAligned(Element.ALIGN_LEFT, req.getAscii(), 286, 563, 0);
-			else
-				cb.showTextAligned(Element.ALIGN_LEFT, req.getAscii(), 286, 550, 0);
-			// StartDate
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getStartDate(), 387, 560, 0);
-			// EndDate
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getEndDate(), 480, 560, 0);
-			// Clinical Site
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getClinicalSite(), 190, 530, 0);
-			cb.endText();
-			return cb;
-		} catch (DocumentException | IOException e) {
-			e.printStackTrace();
-			throw e;
-		}
-	}
-
-	private PdfContentByte getContentByteForCoreOsceForm(PdfStamper pdfStamper, SendFormRequest req)
-			throws DocumentException, IOException {
-		try {
-			PdfContentByte cb = pdfStamper.getOverContent(1);
-			String font = "C:\\Users\\Faizanahmed.khan\\Downloads\\arial-unicode-ms.ttf";
-			BaseFont bf;
-			bf = BaseFont.createFont(font, BaseFont.IDENTITY_H, BaseFont.EMBEDDED);
-
-			cb.setFontAndSize(bf, 10);
-			cb.beginText();
-			// StudentName
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getFirstName() + " " + req.getLastName(), 190, 610, 0);
-			// StudentId
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getTxtStudentID(), 400, 610, 0);
-			// Clinical Rotation
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getClinicalRotation(), 190, 575, 0);
-			// CheckBox
-			if (req.getClinicalRotation().equalsIgnoreCase("Core"))
-				cb.showTextAligned(Element.ALIGN_LEFT, req.getAscii(), 333, 585, 0);
-			else
-				cb.showTextAligned(Element.ALIGN_LEFT, req.getAscii(), 333, 572, 0);
-			// StartDate
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getStartDate(), 427, 573, 0);
-			// EndDate
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getEndDate(), 523, 573, 0);
-			// Clinical Site
-			cb.showTextAligned(Element.ALIGN_LEFT, req.getClinicalSite(), 190, 528, 0);
-			cb.endText();
-			return cb;
-		} catch (DocumentException | IOException e) {
-			e.printStackTrace();
-			throw e;
-		}
-	}
-
+	//This method handles the Webhooks
 	public String handleRequestsFromHelloSign(String requestJson) throws HelloSignException {
 		JSONObject jsonObject = new JSONObject(requestJson);
 		try {
@@ -498,18 +350,18 @@ public class HelloSignService {
 			boolean validRequest = event.isValid(API_KEY);
 			if (validRequest) {
 				switch (event.getTypeString()) {
-					case "callback_test":
-						LOGGER.info("Callback Test call, eventPayload: {}", event.getTypeString());
-						break;
-					case "signature_request_sent":
-						LOGGER.info("Signature Request Sent, eventPayload: {}", event.getTypeString());
-						break;
-					case "signature_request_all_signed":
-						LOGGER.info("Signature Request Signed, eventPayload: {}", event.getTypeString());
-						break;
-					default:
-						LOGGER.info("HS event occured: {}", event.getTypeString());
-						break;
+				case "callback_test":
+					LOGGER.info("Callback Test call, eventPayload: {}", event.getTypeString());
+					break;
+				case "signature_request_sent":
+					LOGGER.info("Signature Request Sent, eventPayload: {}", event.getTypeString());
+					break;
+				case "signature_request_all_signed":
+					LOGGER.info("Signature Request Signed, eventPayload: {}", event.getTypeString());
+					break;
+				default:
+					LOGGER.info("HS event occured: {}", event.getTypeString());
+					break;
 				}
 			}
 		} catch (HelloSignException e) {
@@ -518,6 +370,84 @@ public class HelloSignService {
 		}
 
 		return "Hello API Event Received";
+	}
+
+	//This method download the form by returning the fileURL
+	public FileResponse download(String signatureRequestId) throws ApiException, IOException {
+		LOGGER.info("Invoked Download API");
+
+		init();
+		ApiClient defaultClient = Configuration.getDefaultApiClient();
+		SignatureRequestApi api = new SignatureRequestApi(defaultClient);
+		FileResponse result = null;
+		try {
+
+			result = api.signatureRequestFiles(signatureRequestId, "pdf", true, false);
+			LOGGER.info("Result:{}", result);
+
+			String formName = "Core OSCE";
+//			String file = "C://Users/pavankumar.sp/Downloads/" +formName +".pdf";
+			String file = "/" + formName + ".pdf";
+//			String file =  formName;
+//			downloadUsingNIO(result.getFileUrl(),file);
+
+//    	    URLDnldFile(result.getFileUrl(), file);
+
+		} catch (ApiException e) {
+			System.err.println("Exception when calling AccountApi#accountCreate");
+			System.err.println("Reason: " + e.getResponseBody());
+			System.err.println("Response headers: " + e.getResponseHeaders());
+			e.printStackTrace();
+		}
+//		return null;
+		return result;
+	}
+
+//	private  void downloadUsingNIO(String urlStr, String file) throws IOException {
+//		
+//        URL url = new URL(urlStr);
+//        ReadableByteChannel rbc = Channels.newChannel(url.openStream());
+//        FileOutputStream fos = new FileOutputStream(file);
+//        fos.getChannel().transferFrom(rbc, 0, Long.MAX_VALUE);
+//        LOGGER.info("File Successfully Downloaded");
+//        fos.close();
+//        rbc.close();
+//    }
+
+//	private ResponseEntity URLDnldFile(String file, String fileName) throws IOException{
+//		byte[] byteArray = file.getBytes();
+//		 final HttpHeaders headers = new HttpHeaders();
+//		  headers.setContentType(MediaType.APPLICATION_PDF);   
+//		  if(true) {
+//			  headers.set("Content-Disposition", "attachment; filename=" +fileName+".pdf");
+//				headers.set("Content-Type", ExportJsonAsFile.getContentType("pdf"));
+//		  }
+//	      return new ResponseEntity<byte[]>(byteArray, headers, HttpStatus.OK);
+//		
+//	}
+
+	public byte[] downloadForm(String signatureRequestId) throws HelloSignException {
+		ApiClient defaultClient = Configuration.getDefaultApiClient();
+		init();
+		String downloadURL = null;
+		downloadURL = baseUrl + "/v3/signature_request/files/" + signatureRequestId;
+		LOGGER.info("Document Download URL is: {}", downloadURL);
+		RestTemplate restTemplate = new RestTemplate();
+		HttpEntity<String> httpEntity = new HttpEntity<String>("parameters");
+		ResponseEntity<byte[]> responseEntity = null;
+		try {
+			responseEntity = restTemplate.exchange(downloadURL, HttpMethod.GET, httpEntity, byte[].class);
+		} catch (HttpClientErrorException e) {
+			throw new HelloSignException("URL is not valid, please verify again :" + downloadURL);
+		}
+
+		LOGGER.info("Converted data in byteStream is ", responseEntity.getBody());
+		return responseEntity.getBody();
+	}
+
+	private String getHeader() {
+		return "{\"Username\":\"" + helloSignUserName + "\"," + " \"Password\":\"" + helloSignPassword + "\","
+				+ " \"AccountId\":\"" + accountId + "\"}";
 	}
 
 }
